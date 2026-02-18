@@ -6,6 +6,7 @@ from pathlib import Path
 
 from .converter import contains_hanzi, hanzi_to_tailo
 from .dict_loader import load_dict_csv
+from .ipa import tailo_to_ipa
 from .opencc_util import to_traditional
 from .romanize import convert_numeric_poj_in_text, convert_poj_word_to_tailo
 
@@ -41,7 +42,7 @@ def cmd_lookup(args: argparse.Namespace) -> int:
         print(f"(not found) {word}", file=sys.stderr)
         return 2
     for v in vals:
-        print(v)
+        print(tailo_to_ipa(v) if args.output == "ipa" else v)
     return 0
 
 
@@ -49,7 +50,10 @@ def cmd_convert(args: argparse.Namespace) -> int:
     text = _read_input_text(args)
 
     if args.mode == "poj":
-        print(convert_poj_word_to_tailo(text, orthography=not args.no_orthography))
+        out = convert_poj_word_to_tailo(text, orthography=not args.no_orthography)
+        if args.output == "ipa":
+            out = tailo_to_ipa(out)
+        print(out)
         return 0
 
     if args.mode == "hanzi":
@@ -64,15 +68,16 @@ def cmd_convert(args: argparse.Namespace) -> int:
         except ValueError as e:
             print(str(e), file=sys.stderr)
             return 2
-        print(
-            hanzi_to_tailo(
-                text,
-                mapping,
-                max_key_len=max_len,
-                ambiguous=args.ambiguous,
-                unknown=args.unknown,
-            )
+        out = hanzi_to_tailo(
+            text,
+            mapping,
+            max_key_len=max_len,
+            ambiguous=args.ambiguous,
+            unknown=args.unknown,
         )
+        if args.output == "ipa":
+            out = tailo_to_ipa(out)
+        print(out)
         return 0
 
     # auto
@@ -96,6 +101,8 @@ def cmd_convert(args: argparse.Namespace) -> int:
             unknown=args.unknown,
         )
     text = convert_numeric_poj_in_text(text, orthography=not args.no_orthography)
+    if args.output == "ipa":
+        text = tailo_to_ipa(text)
     print(text)
     return 0
 
@@ -119,6 +126,12 @@ def _add_common_args(p: argparse.ArgumentParser) -> None:
         "--no-orthography",
         action="store_true",
         help="Skip POJ→台羅 orthography (still converts tone numbers).",
+    )
+    p.add_argument(
+        "--output",
+        choices=("tailo", "ipa"),
+        default="tailo",
+        help="Output format (default: tailo).",
     )
 
 

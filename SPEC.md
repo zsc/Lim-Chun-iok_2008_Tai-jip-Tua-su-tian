@@ -20,7 +20,7 @@ Target users: in-repo usage (default `./dict.csv`) and command-line piping.
 
 ### Convert (default)
 ```
-tailo [--dict PATH] [--opencc CONFIG] [--no-opencc] [--mode auto|hanzi|poj] [--ambiguous first|all] [--unknown keep|mark] [--no-orthography] [TEXT...]
+tailo [--dict PATH] [--opencc CONFIG] [--no-opencc] [--mode auto|hanzi|poj] [--ambiguous first|all] [--unknown keep|mark] [--no-orthography] [--output tailo|ipa] [TEXT...]
 ```
 
 Examples:
@@ -51,10 +51,11 @@ Options:
   - `keep`: keep unknown Hanzi as-is.
   - `mark`: output `<?>`.
 - `--no-orthography`: skip POJ→台羅 orthography conversion (still converts tone numbers).
+- `--output tailo|ipa`: output 台羅 (default) or rule-based IPA (tone as superscript digits).
 
 ### Lookup
 ```
-tailo lookup [--dict PATH] [--opencc CONFIG] [--no-opencc] [--no-orthography] 漢字
+tailo lookup [--dict PATH] [--opencc CONFIG] [--no-opencc] [--no-orthography] [--output tailo|ipa] 漢字
 ```
 
 Example:

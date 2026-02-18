@@ -68,6 +68,7 @@ python -m tailo lookup 台灣
 | `--unknown {keep,mark}` | 未知漢字處理：`keep` 保留原字，`mark` 標記為 `<?>` |
 | `--no-opencc` | 停用簡體轉繁體功能 |
 | `--no-orthography` | 僅轉換聲調數字，不進行 POJ→台羅 正字法轉換 |
+| `--output {tailo,ipa}` | 輸出格式：`tailo`（預設）或規則轉換的 `ipa`（以 ¹-⁸ 表示聲調） |
 
 ## 範例
 
@@ -79,6 +80,10 @@ tâi-uân
 # 白話字轉台羅
 $ python -m tailo --mode poj "chit8-si3"
 tsi̍t-sì
+
+# 輸出 IPA
+$ python -m tailo --mode poj --output ipa "chit8 e5"
+t͡sit̚⁸ e⁵
 
 # 顯示多音字所有讀音
 $ python -m tailo --ambiguous all "一"
