@@ -32,10 +32,32 @@ def hanzi_to_tailo(
     ambiguous: str = "first",
     unknown: str = "keep",
 ) -> str:
+    out, _matched_chars, _matched_segments, _unknown_chars = hanzi_to_tailo_with_stats(
+        text,
+        mapping,
+        max_key_len=max_key_len,
+        ambiguous=ambiguous,
+        unknown=unknown,
+    )
+    return out
+
+
+def hanzi_to_tailo_with_stats(
+    text: str,
+    mapping: dict[str, list[str]],
+    *,
+    max_key_len: int,
+    ambiguous: str = "first",
+    unknown: str = "keep",
+) -> tuple[str, int, int, int]:
     if ambiguous not in ("first", "all"):
         raise ValueError("ambiguous must be 'first' or 'all'")
     if unknown not in ("keep", "mark"):
         raise ValueError("unknown must be 'keep' or 'mark'")
+
+    matched_chars = 0
+    matched_segments = 0
+    unknown_chars = 0
 
     out = ""
     i = 0
@@ -54,6 +76,8 @@ def hanzi_to_tailo(
                     break
 
             if match and match_vals:
+                matched_chars += len(match)
+                matched_segments += 1
                 if ambiguous == "first":
                     seg = match_vals[0]
                 else:
@@ -65,6 +89,7 @@ def hanzi_to_tailo(
                 i += len(match)
                 continue
 
+            unknown_chars += 1
             if unknown == "mark":
                 if out and _is_wordish(out[-1]):
                     out += " "
@@ -78,4 +103,4 @@ def hanzi_to_tailo(
         out += ch
         i += 1
 
-    return out
+    return out, matched_chars, matched_segments, unknown_chars

@@ -1,5 +1,10 @@
+import contextlib
+import io
+import tempfile
+from pathlib import Path
 import unittest
 
+from tailo_cli.__main__ import main as tailo_main
 from tailo_cli.converter import hanzi_to_tailo
 from tailo_cli.ipa import tailo_syllable_to_ipa, tailo_to_ipa
 from tailo_cli.opencc_util import OpenCC, to_traditional
@@ -56,6 +61,51 @@ class TestIPA(unittest.TestCase):
     def test_tailo_to_ipa_in_text(self) -> None:
         self.assertEqual(tailo_to_ipa("tsi̍t ê"), "t͡sit̚⁸ e⁵")
         self.assertEqual(tailo_to_ipa("{tsi̍t/it}"), "{t͡sit̚⁸/it̚⁴}")
+
+
+class TestLookupCli(unittest.TestCase):
+    def test_lookup_not_found_exit_zero(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            dict_path = Path(tmpdir) / "dict.csv"
+            dict_path.write_text("word,chinese\nchit8,[一]\n", encoding="utf-8")
+
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                rc = tailo_main(["lookup", "--no-opencc", "--dict", str(dict_path), "嘛"])
+
+            self.assertEqual(rc, 0)
+            self.assertEqual(stdout.getvalue(), "")
+            self.assertIn("(not found) 嘛", stderr.getvalue())
+
+    def test_lookup_best_effort_partial_conversion(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            dict_path = Path(tmpdir) / "dict.csv"
+            dict_path.write_text("word,chinese\ntai5-uan5,[台灣]\n", encoding="utf-8")
+
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                rc = tailo_main(["lookup", "--no-opencc", "--dict", str(dict_path), "台灣嘛"])
+
+            self.assertEqual(rc, 0)
+            self.assertIn("(not found) 台灣嘛", stderr.getvalue())
+            self.assertEqual(stdout.getvalue().strip(), "tâi-uân嘛")
+
+    @unittest.skipIf(OpenCC is None, "OpenCC not installed")
+    def test_lookup_opencc_does_not_reduce_matches(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            dict_path = Path(tmpdir) / "dict.csv"
+            dict_path.write_text("word,chinese\ntai5-uan5,[台灣]\n", encoding="utf-8")
+
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                rc = tailo_main(["lookup", "--dict", str(dict_path), "台灣嘛"])
+
+            self.assertEqual(rc, 0)
+            self.assertIn("(not found) 台灣嘛", stderr.getvalue())
+            self.assertEqual(stdout.getvalue().strip(), "tâi-uân嘛")
 
 
 if __name__ == "__main__":

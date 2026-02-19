@@ -4,7 +4,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from .converter import contains_hanzi, hanzi_to_tailo
+from .converter import contains_hanzi, hanzi_to_tailo, hanzi_to_tailo_with_stats
 from .dict_loader import load_dict_csv
 from .ipa import tailo_to_ipa
 from .opencc_util import to_traditional
@@ -24,25 +24,74 @@ def _default_dict_path() -> Path:
     return Path(__file__).resolve().parent.parent / "dict.csv"
 
 
+def _unique(items: list[str]) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+        if item in seen:
+            continue
+        seen.add(item)
+        out.append(item)
+    return out
+
+
+def _normalize_for_dict(text: str) -> str:
+    # `dict.csv` uses "台" in headwords like "台灣", but OpenCC may normalize it to "臺".
+    return text.replace("臺", "台")
+
+
 def cmd_lookup(args: argparse.Namespace) -> int:
     dict_path = Path(args.dict or _default_dict_path())
-    word = args.word
+    raw_word = args.word
+    candidates = [raw_word, _normalize_for_dict(raw_word)]
     if not args.no_opencc:
-        word = to_traditional(word, config=args.opencc)
+        try:
+            converted = to_traditional(raw_word, config=args.opencc)
+            candidates.extend([converted, _normalize_for_dict(converted)])
+        except RuntimeError as e:
+            print(str(e), file=sys.stderr)
+    candidates = _unique(candidates)
     try:
-        mapping, _max_len = load_dict_csv(dict_path, orthography=not args.no_orthography)
+        mapping, max_len = load_dict_csv(dict_path, orthography=not args.no_orthography)
     except FileNotFoundError:
         print(f"dict.csv not found: {dict_path} (use --dict PATH)", file=sys.stderr)
         return 2
     except ValueError as e:
         print(str(e), file=sys.stderr)
         return 2
-    vals = mapping.get(word)
-    if not vals:
-        print(f"(not found) {word}", file=sys.stderr)
-        return 2
-    for v in vals:
-        print(tailo_to_ipa(v) if args.output == "ipa" else v)
+
+    for cand in candidates:
+        vals = mapping.get(cand)
+        if not vals:
+            continue
+        for v in vals:
+            print(tailo_to_ipa(v) if args.output == "ipa" else v)
+        return 0
+
+    print(f"(not found) {raw_word}", file=sys.stderr)
+
+    # Best-effort: still convert the parts we can, e.g. `台灣嘛` -> `tâi-uân嘛`.
+    if not any(contains_hanzi(c) for c in candidates):
+        return 0
+
+    best: tuple[tuple[int, int, int], str] | None = None
+    for cand in candidates:
+        if not contains_hanzi(cand):
+            continue
+        out, matched_chars, matched_segments, unknown_chars = hanzi_to_tailo_with_stats(
+            cand,
+            mapping,
+            max_key_len=max_len,
+            ambiguous="first",
+            unknown="keep",
+        )
+        key = (matched_chars, -unknown_chars, -matched_segments)
+        if best is None or key > best[0]:
+            best = (key, out)
+
+    if best and best[0][0] > 0:
+        out = best[1]
+        print(tailo_to_ipa(out) if args.output == "ipa" else out)
     return 0
 
 
@@ -58,8 +107,14 @@ def cmd_convert(args: argparse.Namespace) -> int:
 
     if args.mode == "hanzi":
         dict_path = Path(args.dict or _default_dict_path())
+        candidates = [text, _normalize_for_dict(text)]
         if not args.no_opencc:
-            text = to_traditional(text, config=args.opencc)
+            try:
+                converted = to_traditional(text, config=args.opencc)
+                candidates.extend([converted, _normalize_for_dict(converted)])
+            except RuntimeError as e:
+                print(str(e), file=sys.stderr)
+        candidates = _unique(candidates)
         try:
             mapping, max_len = load_dict_csv(dict_path, orthography=not args.no_orthography)
         except FileNotFoundError:
@@ -68,13 +123,20 @@ def cmd_convert(args: argparse.Namespace) -> int:
         except ValueError as e:
             print(str(e), file=sys.stderr)
             return 2
-        out = hanzi_to_tailo(
-            text,
-            mapping,
-            max_key_len=max_len,
-            ambiguous=args.ambiguous,
-            unknown=args.unknown,
-        )
+
+        best: tuple[tuple[int, int, int], str] | None = None
+        for cand in candidates:
+            out, matched_chars, matched_segments, unknown_chars = hanzi_to_tailo_with_stats(
+                cand,
+                mapping,
+                max_key_len=max_len,
+                ambiguous=args.ambiguous,
+                unknown=args.unknown,
+            )
+            key = (matched_chars, -unknown_chars, -matched_segments)
+            if best is None or key > best[0]:
+                best = (key, out)
+        out = best[1] if best else ""
         if args.output == "ipa":
             out = tailo_to_ipa(out)
         print(out)
@@ -83,8 +145,14 @@ def cmd_convert(args: argparse.Namespace) -> int:
     # auto
     if contains_hanzi(text):
         dict_path = Path(args.dict or _default_dict_path())
+        candidates = [text, _normalize_for_dict(text)]
         if not args.no_opencc:
-            text = to_traditional(text, config=args.opencc)
+            try:
+                converted = to_traditional(text, config=args.opencc)
+                candidates.extend([converted, _normalize_for_dict(converted)])
+            except RuntimeError as e:
+                print(str(e), file=sys.stderr)
+        candidates = _unique(candidates)
         try:
             mapping, max_len = load_dict_csv(dict_path, orthography=not args.no_orthography)
         except FileNotFoundError:
@@ -93,13 +161,20 @@ def cmd_convert(args: argparse.Namespace) -> int:
         except ValueError as e:
             print(str(e), file=sys.stderr)
             return 2
-        text = hanzi_to_tailo(
-            text,
-            mapping,
-            max_key_len=max_len,
-            ambiguous=args.ambiguous,
-            unknown=args.unknown,
-        )
+
+        best: tuple[tuple[int, int, int], str] | None = None
+        for cand in candidates:
+            out, matched_chars, matched_segments, unknown_chars = hanzi_to_tailo_with_stats(
+                cand,
+                mapping,
+                max_key_len=max_len,
+                ambiguous=args.ambiguous,
+                unknown=args.unknown,
+            )
+            key = (matched_chars, -unknown_chars, -matched_segments)
+            if best is None or key > best[0]:
+                best = (key, out)
+        text = best[1] if best else text
     text = convert_numeric_poj_in_text(text, orthography=not args.no_orthography)
     if args.output == "ipa":
         text = tailo_to_ipa(text)
